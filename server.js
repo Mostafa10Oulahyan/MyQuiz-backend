@@ -14,10 +14,13 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/questions', require('./routes/questions'));
 
 app.get('/', (req, res) => {
-    res.send('Quiz API is running');
+    res.send('Quiz API is running...');
 });
 
 // Start Server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
+// Export the Express API for Vercel
+module.exports = app;
