@@ -46,12 +46,12 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// Login
+// Login (by email only)
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         
-        // Find user
+        // Find user by email
         const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
         if (users.length === 0) return res.status(400).json({ message: 'User not found' });
         const user = users[0];
@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
         
         res.json({ 
             token, 
-            user: { id: user.id, username: user.username, total_points: user.total_points, full_time: user.full_time } 
+            user: { id: user.id, username: user.username, email: user.email, avatar_url: user.avatar_url, total_points: user.total_points, full_time: user.full_time } 
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -123,6 +123,29 @@ router.post('/score', verifyToken, async (req, res) => {
         `, [req.user.id, categoryId, score]);
         
         res.json({ message: 'Score saved successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Profile (username, avatar_url)
+router.put('/profile', verifyToken, async (req, res) => {
+    try {
+        const { username, avatar_url } = req.body;
+        
+        if (username) {
+            // Check if username is taken by another user
+            const [existing] = await pool.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, req.user.id]);
+            if (existing.length > 0) return res.status(400).json({ message: 'Ce nom d\'utilisateur est déjà pris.' });
+        }
+        
+        await pool.query(
+            'UPDATE users SET username = COALESCE(?, username), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
+            [username || null, avatar_url || null, req.user.id]
+        );
+        
+        const [updated] = await pool.query('SELECT id, username, email, avatar_url, total_points, full_time FROM users WHERE id = ?', [req.user.id]);
+        res.json({ message: 'Profil mis à jour', user: updated[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
