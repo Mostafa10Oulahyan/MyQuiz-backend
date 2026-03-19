@@ -8,7 +8,7 @@ router.get('/:category_name', async (req, res) => {
         const categoryName = req.params.category_name.toLowerCase();
 
         // 1. Get category ID
-        const [categories] = await pool.query('SELECT id FROM categories WHERE name = ?', [categoryName]);
+        const [categories] = await pool.query('SELECT id FROM categories WHERE LOWER(name) = ?', [categoryName]);
         if (categories.length === 0) return res.status(404).json({ message: 'Category not found' });
         
         const categoryId = categories[0].id;

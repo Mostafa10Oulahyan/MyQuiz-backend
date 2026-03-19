@@ -28,9 +28,9 @@ router.get('/:name', async (req, res) => {
             SELECT c.*, COUNT(q.id) as question_count 
             FROM categories c 
             LEFT JOIN questions q ON c.id = q.category_id 
-            WHERE c.name = ? AND c.is_active = 1
+            WHERE LOWER(c.name) = ? AND c.is_active = 1
             GROUP BY c.id
-        `, [req.params.name]);
+        `, [req.params.name.toLowerCase()]);
         
         if (rows.length === 0) return res.status(404).json({ message: 'Category not found' });
         res.json(rows[0]);
