@@ -2,16 +2,13 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
 
-// ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 // SEED.JS — Populates the database with initial data
-// ──────────────────────────────────────────────────────────────
-// What this file does:
-//   1. Inserts all 12 categories (with icons, colors, groups)
-//   2. Inserts sample questions for each category
-//
+// ══════════════════════════════════════════════════════════════
+// Matches claudeDB.sql schema exactly.
 // Run AFTER initDB.js:
 //   node scripts/initDB.js && node scripts/seed.js
-// ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 
 const CATEGORIES = [
     // ── Frontend ──
@@ -32,16 +29,18 @@ const CATEGORIES = [
     { name: 'mongodb',    display_name: 'MongoDB',    group_name: 'database',  icon: 'fa-solid fa-leaf',       color: '#47a248', description: 'Maîtrisez MongoDB : documents, agrégation, indexation et Mongoose.',                        order: 12 },
 ];
 
-// ──────────────────────────────────────────────────────────────
-// Sample questions per category (add more as needed!)
-// Format: { ques, correctAnswer, hint, difficulty, choices[] }
-// ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// Sample questions per category
+// Format: { ques, correctAnswer, hint, hint_cost, difficulty, choices[] }
+//   hint_cost: easy=5, medium=10, hard=20 (as per claudeDB.sql)
+// ══════════════════════════════════════════════════════════════
 const SAMPLE_QUESTIONS = {
     python: [
         {
             ques: 'Quel mot-clé est utilisé pour définir une fonction en Python ?',
             correctAnswer: 'def',
             hint: 'C\'est un mot de 3 lettres.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['def', 'function', 'func']
         },
@@ -49,6 +48,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel est le résultat de `type([])` en Python ?',
             correctAnswer: "<class 'list'>",
             hint: 'Les crochets [] créent ce type de structure.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ["<class 'list'>", "<class 'array'>", "<class 'tuple'>"]
         },
@@ -56,6 +56,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Comment créer un dictionnaire vide en Python ?',
             correctAnswer: '{}',
             hint: 'Utilisez les accolades.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['{}', '[]', 'dict[]']
         },
@@ -65,6 +66,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel est le point d\'entrée d\'un programme Java ?',
             correctAnswer: 'public static void main(String[] args)',
             hint: 'C\'est une méthode statique publique.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['public static void main(String[] args)', 'void start()', 'public void run()']
         },
@@ -72,6 +74,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel mot-clé Java est utilisé pour l\'héritage ?',
             correctAnswer: 'extends',
             hint: 'Ce mot signifie "étendre" en anglais.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['extends', 'inherits', 'implements']
         },
@@ -79,6 +82,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel est le type wrapper pour int en Java ?',
             correctAnswer: 'Integer',
             hint: 'C\'est le nom complet du type primitif.',
+            hint_cost: 10,
             difficulty: 'medium',
             choices: ['Integer', 'Int', 'Number']
         },
@@ -88,6 +92,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle méthode Express est utilisée pour gérer les requêtes GET ?',
             correctAnswer: 'app.get()',
             hint: 'Le nom de la méthode HTTP en minuscules.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['app.get()', 'app.fetch()', 'app.read()']
         },
@@ -95,6 +100,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel module Node.js est utilisé pour créer un serveur HTTP ?',
             correctAnswer: 'http',
             hint: 'C\'est le nom du protocole lui-même.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['http', 'server', 'net']
         },
@@ -102,6 +108,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Que retourne `require()` en Node.js ?',
             correctAnswer: 'module.exports du fichier importé',
             hint: 'C\'est ce que le module exporte.',
+            hint_cost: 10,
             difficulty: 'medium',
             choices: ['module.exports du fichier importé', 'Le contenu du fichier en texte', 'Un objet Buffer']
         },
@@ -111,6 +118,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Comment déclarer une variable en PHP ?',
             correctAnswer: '$variable',
             hint: 'Ça commence par un symbole monétaire.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['$variable', 'var variable', 'let variable']
         },
@@ -118,6 +126,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle fonction PHP affiche du texte ?',
             correctAnswer: 'echo',
             hint: 'C\'est aussi un terme qui signifie "répéter un son".',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['echo', 'print_text', 'display']
         },
@@ -125,6 +134,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Comment connecter PHP à une base de données MySQL de manière sécurisée ?',
             correctAnswer: 'PDO',
             hint: 'C\'est un acronyme de 3 lettres (PHP Data ...).',
+            hint_cost: 10,
             difficulty: 'medium',
             choices: ['PDO', 'mysql_connect', 'mysqli_only']
         },
@@ -134,6 +144,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel ORM est intégré dans Laravel ?',
             correctAnswer: 'Eloquent',
             hint: 'Un mot qui signifie "éloquent" en français.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['Eloquent', 'Doctrine', 'Hibernate']
         },
@@ -141,6 +152,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle commande crée un nouveau contrôleur en Laravel ?',
             correctAnswer: 'php artisan make:controller',
             hint: 'C\'est une commande artisan.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['php artisan make:controller', 'laravel create controller', 'composer make:controller']
         },
@@ -148,6 +160,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel moteur de template utilise Laravel ?',
             correctAnswer: 'Blade',
             hint: 'C\'est un mot qui signifie "lame" en anglais.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['Blade', 'Twig', 'Mustache']
         },
@@ -157,6 +170,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle commande SQL est utilisée pour récupérer des données ?',
             correctAnswer: 'SELECT',
             hint: 'C\'est le mot anglais pour "sélectionner".',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['SELECT', 'GET', 'FETCH']
         },
@@ -164,6 +178,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel mot-clé SQL est utilisé pour joindre deux tables ?',
             correctAnswer: 'JOIN',
             hint: 'C\'est le mot anglais pour "joindre".',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['JOIN', 'MERGE', 'COMBINE']
         },
@@ -171,6 +186,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle clause SQL filtre les résultats après un GROUP BY ?',
             correctAnswer: 'HAVING',
             hint: 'Ce n\'est pas WHERE — c\'est utilisé après les agrégations.',
+            hint_cost: 10,
             difficulty: 'medium',
             choices: ['HAVING', 'WHERE', 'FILTER']
         },
@@ -180,6 +196,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel format de données MongoDB utilise-t-il pour stocker les documents ?',
             correctAnswer: 'BSON',
             hint: 'C\'est du JSON en format binaire.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['BSON', 'XML', 'CSV']
         },
@@ -187,6 +204,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quelle méthode MongoDB est utilisée pour insérer un document ?',
             correctAnswer: 'insertOne()',
             hint: 'Insert + One.',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['insertOne()', 'add()', 'create()']
         },
@@ -194,6 +212,7 @@ const SAMPLE_QUESTIONS = {
             ques: 'Quel framework ODM est couramment utilisé avec MongoDB et Node.js ?',
             correctAnswer: 'Mongoose',
             hint: 'C\'est un animal 🐍 (une sorte de).',
+            hint_cost: 5,
             difficulty: 'easy',
             choices: ['Mongoose', 'Sequelize', 'Prisma']
         },
@@ -209,7 +228,7 @@ async function seedDB() {
             host: process.env.DB_HOST || '127.0.0.1',
             user: process.env.DB_USER || 'root',
             password: process.env.DB_PASSWORD || '',
-            database: process.env.DB_NAME || 'quiz_db'
+            database: process.env.DB_NAME || 'mostafa_quizdb'
         });
 
         // ─── 1. Seed Categories ───────────────────────
@@ -229,7 +248,7 @@ async function seedDB() {
             console.log(`  ✅ ${cat.display_name} (${cat.group_name})`);
         }
 
-        // ─── 2. Seed Sample Questions for NEW categories ──
+        // ─── 2. Seed Sample Questions ─────────────────
         console.log('\n📝 Seeding sample questions...');
         for (const [categoryName, questions] of Object.entries(SAMPLE_QUESTIONS)) {
             // Get category ID
@@ -245,10 +264,10 @@ async function seedDB() {
 
             let count = 0;
             for (const q of questions) {
-                // Insert question
+                // Insert question (with hint_cost from claudeDB.sql)
                 const [qResult] = await connection.query(
-                    'INSERT INTO questions (category_id, question_text, correct_answer, hint, difficulty) VALUES (?, ?, ?, ?, ?)',
-                    [categoryId, q.ques, q.correctAnswer, q.hint, q.difficulty || 'medium']
+                    'INSERT INTO questions (category_id, question_text, correct_answer, hint, hint_cost, difficulty) VALUES (?, ?, ?, ?, ?, ?)',
+                    [categoryId, q.ques, q.correctAnswer, q.hint, q.hint_cost || 10, q.difficulty || 'medium']
                 );
                 const questionId = qResult.insertId;
 

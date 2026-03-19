@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
         
         res.json({ 
             token, 
-            user: { id: user.id, username: user.username, email: user.email, avatar_url: user.avatar_url, total_points: user.total_points, full_time: user.full_time } 
+            user: { id: user.id, username: user.username, email: user.email, avatar_url: user.avatar_url, total_points: user.total_points } 
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -93,24 +93,14 @@ router.put('/points', verifyToken, async (req, res) => {
     }
 });
 
-// Update Full Time
-router.put('/time', verifyToken, async (req, res) => {
-    try {
-        const { time_added } = req.body;
-        
-        await pool.query('UPDATE users SET full_time = full_time + ? WHERE id = ?', [time_added, req.user.id]);
-        
-        res.json({ message: 'Time updated' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+// (Time tracking is now purely in quiz_attempts and user_scores)
 
 // Save Score
 router.post('/score', verifyToken, async (req, res) => {
     try {
-        const { category_name, score, time_spent } = req.body; 
+        const { category_name, score, time_spent, total_questions } = req.body; 
         const userId = req.user.id;
+        const totalQ = total_questions || 10;
 
         // 1. Get Category
         const [categories] = await pool.query('SELECT id FROM categories WHERE name = ?', [category_name]);
@@ -131,27 +121,26 @@ router.post('/score', verifyToken, async (req, res) => {
 
         // 3. Update/Insert User Scores (Keep Best)
         await pool.query(`
-            INSERT INTO user_scores (user_id, category_id, category_name, score, points) 
-            VALUES (?, ?, ?, ?, ?) 
+            INSERT INTO user_scores (user_id, category_id, score, total_questions, points, time_spent) 
+            VALUES (?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
-                score = GREATEST(score, VALUES(score)), 
-                points = GREATEST(points, VALUES(points)),
-                updated_at = CURRENT_TIMESTAMP
-        `, [userId, categoryId, category_name, score, points_earned]);
+                score = IF(VALUES(score) > score, VALUES(score), score),
+                total_questions = IF(VALUES(score) > score, VALUES(total_questions), total_questions),
+                points = IF(VALUES(score) > score, VALUES(points), points),
+                time_spent = IF(VALUES(score) > score, VALUES(time_spent), time_spent),
+                completed_at = CURRENT_TIMESTAMP
+        `, [userId, categoryId, score, totalQ, points_earned, time_added]);
 
         // 4. Log the Attempt
         await pool.query(`
-            INSERT INTO quiz_attempts (user_id, category_id, score, points, total_questions, time_spent)
+            INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, time_spent)
             VALUES (?, ?, ?, ?, ?, ?)
-        `, [userId, categoryId, score, points_earned, 10, time_added]);
+        `, [userId, categoryId, score, totalQ, points_earned, time_added]);
 
-        // 5. Update Global User Stats (Sum points increment and add time)
+        // 5. Update Global User Wallet
         await pool.query(`
-            UPDATE users 
-            SET total_points = total_points + ?, 
-                full_time = full_time + ? 
-            WHERE id = ?
-        `, [points_diff, time_added, userId]);
+            UPDATE users SET total_points = total_points + ? WHERE id = ?
+        `, [points_diff, userId]);
 
         const [updatedUser] = await pool.query('SELECT total_points FROM users WHERE id = ?', [userId]);
 
@@ -182,7 +171,7 @@ router.put('/profile', verifyToken, async (req, res) => {
             [username || null, avatar_url || null, req.user.id]
         );
         
-        const [updated] = await pool.query('SELECT id, username, email, avatar_url, total_points, full_time FROM users WHERE id = ?', [req.user.id]);
+        const [updated] = await pool.query('SELECT id, username, email, avatar_url, total_points FROM users WHERE id = ?', [req.user.id]);
         res.json({ message: 'Profil mis à jour', user: updated[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -199,44 +188,44 @@ router.get('/leaderboard', async (req, res) => {
         if (group && group !== 'all') {
             query = `
                 SELECT 
-                    u.id, u.username, u.avatar_url, u.full_time,
+                    u.id, u.username, u.avatar_url,
                     us_group.total_pts as total_points,
                     us_group.max_score as best_score,
                     us_group.last_date as last_quiz_date,
                     ? as last_quiz_type
                 FROM users u
                 INNER JOIN (
-                    SELECT us.user_id, SUM(us.points) as total_pts, MAX(us.score) as max_score, MAX(us.updated_at) as last_date
+                    SELECT us.user_id, SUM(us.points) as total_pts, MAX(us.score) as max_score, MAX(us.completed_at) as last_date
                     FROM user_scores us
-                    JOIN categories c ON us.category_name = c.name
+                    JOIN categories c ON us.category_id = c.id
                     WHERE c.group_name = ?
                     GROUP BY us.user_id
                 ) us_group ON u.id = us_group.user_id
                 WHERE u.role != 'admin'
-                ORDER BY total_points DESC, u.full_time ASC
+                ORDER BY total_points DESC
                 LIMIT 50
             `;
             params = [group, group];
         } else {
             query = `
                 SELECT 
-                    u.id, u.username, u.avatar_url, u.full_time,
+                    u.id, u.username, u.avatar_url,
                     IFNULL(us_stats.total_pts, 0) as total_points,
                     IFNULL(us_stats.max_score, 0) as best_score,
                     us_stats.last_date as last_quiz_date,
                     (SELECT c.group_name 
                      FROM user_scores us2 
-                     JOIN categories c ON us2.category_name = c.name 
+                     JOIN categories c ON us2.category_id = c.id 
                      WHERE us2.user_id = u.id 
-                     ORDER BY us2.updated_at DESC LIMIT 1) as last_quiz_type
+                     ORDER BY us2.completed_at DESC LIMIT 1) as last_quiz_type
                 FROM users u
                 LEFT JOIN (
-                    SELECT user_id, SUM(points) as total_pts, MAX(score) as max_score, MAX(updated_at) as last_date
+                    SELECT user_id, SUM(points) as total_pts, MAX(score) as max_score, MAX(completed_at) as last_date
                     FROM user_scores 
                     GROUP BY user_id
                 ) us_stats ON u.id = us_stats.user_id
                 WHERE u.role != 'admin'
-                ORDER BY total_points DESC, u.full_time ASC
+                ORDER BY total_points DESC
                 LIMIT 50
             `;
         }
