@@ -200,15 +200,19 @@ router.get('/leaderboard', async (req, res) => {
             query = `
                 SELECT 
                     u.id, u.username, u.avatar_url, u.full_time,
-                    IFNULL(SUM(us.points), 0) as total_points, 
-                    MAX(us.score) as best_score,
-                    MAX(us.updated_at) as last_quiz_date,
+                    us_group.total_pts as total_points,
+                    us_group.max_score as best_score,
+                    us_group.last_date as last_quiz_date,
                     ? as last_quiz_type
                 FROM users u
-                INNER JOIN user_scores us ON u.id = us.user_id
-                INNER JOIN categories c ON us.category_name = c.name
-                WHERE u.role != 'admin' AND c.group_name = ?
-                GROUP BY u.id, u.username, u.avatar_url, u.full_time
+                INNER JOIN (
+                    SELECT us.user_id, SUM(us.points) as total_pts, MAX(us.score) as max_score, MAX(us.updated_at) as last_date
+                    FROM user_scores us
+                    JOIN categories c ON us.category_name = c.name
+                    WHERE c.group_name = ?
+                    GROUP BY us.user_id
+                ) us_group ON u.id = us_group.user_id
+                WHERE u.role != 'admin'
                 ORDER BY total_points DESC, u.full_time ASC
                 LIMIT 50
             `;
@@ -217,18 +221,21 @@ router.get('/leaderboard', async (req, res) => {
             query = `
                 SELECT 
                     u.id, u.username, u.avatar_url, u.full_time,
-                    IFNULL(SUM(us.points), 0) as total_points, 
-                    MAX(us.score) as best_score,
-                    MAX(us.updated_at) as last_quiz_date,
-                    (SELECT c2.group_name 
+                    IFNULL(us_stats.total_pts, 0) as total_points,
+                    IFNULL(us_stats.max_score, 0) as best_score,
+                    us_stats.last_date as last_quiz_date,
+                    (SELECT c.group_name 
                      FROM user_scores us2 
-                     JOIN categories c2 ON us2.category_name = c2.name 
+                     JOIN categories c ON us2.category_name = c.name 
                      WHERE us2.user_id = u.id 
                      ORDER BY us2.updated_at DESC LIMIT 1) as last_quiz_type
                 FROM users u
-                LEFT JOIN user_scores us ON u.id = us.user_id
+                LEFT JOIN (
+                    SELECT user_id, SUM(points) as total_pts, MAX(score) as max_score, MAX(updated_at) as last_date
+                    FROM user_scores 
+                    GROUP BY user_id
+                ) us_stats ON u.id = us_stats.user_id
                 WHERE u.role != 'admin'
-                GROUP BY u.id, u.username, u.avatar_url, u.full_time
                 ORDER BY total_points DESC, u.full_time ASC
                 LIMIT 50
             `;
