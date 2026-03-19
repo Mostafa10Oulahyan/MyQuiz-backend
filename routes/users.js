@@ -115,14 +115,34 @@ router.post('/score', verifyToken, async (req, res) => {
         if (categories.length === 0) return res.status(400).json({ message: 'Category not found' });
         const categoryId = categories[0].id;
         
+        const points_earned = score * 100;
+        
         // Upsert score (insert or update on duplicate)
         await pool.query(`
-            INSERT INTO user_scores (user_id, category_id, score) 
-            VALUES (?, ?, ?) 
-            ON DUPLICATE KEY UPDATE score = VALUES(score), completed_at = CURRENT_TIMESTAMP
-        `, [req.user.id, categoryId, score]);
+            INSERT INTO user_scores (user_id, category_id, score, points) 
+            VALUES (?, ?, ?, ?) 
+            ON DUPLICATE KEY UPDATE 
+                score = GREATEST(score, VALUES(score)), 
+                points = GREATEST(points, VALUES(points)),
+                completed_at = CURRENT_TIMESTAMP
+        `, [req.user.id, categoryId, score, points_earned]);
+
+        // Log attempt
+        await pool.query(`
+            INSERT INTO quiz_attempts (user_id, category_id, score, points, total_questions)
+            VALUES (?, ?, ?, ?, ?)
+        `, [req.user.id, categoryId, score, points_earned, 10]); // total_questions should ideally be dynamic too
+
+        // Update user's total points
+        await pool.query('UPDATE users SET total_points = total_points + ? WHERE id = ?', [points_earned, req.user.id]);
         
-        res.json({ message: 'Score saved successfully' });
+        const [updatedUser] = await pool.query('SELECT total_points FROM users WHERE id = ?', [req.user.id]);
+        
+        res.json({ 
+            message: 'Score saved successfully', 
+            points_earned, 
+            total_points: updatedUser[0].total_points 
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

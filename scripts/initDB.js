@@ -101,6 +101,7 @@ async function initDB() {
                 user_id      INT NOT NULL,
                 category_id  INT NOT NULL,
                 score        INT NOT NULL,
+                points       INT DEFAULT 0,
                 time_spent   INT DEFAULT 0,
                 completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_user_category (user_id, category_id),
@@ -119,6 +120,7 @@ async function initDB() {
                 user_id         INT NOT NULL,
                 category_id     INT NOT NULL,
                 score           INT NOT NULL,
+                points          INT DEFAULT 0,
                 total_questions INT NOT NULL,
                 time_spent      INT DEFAULT 0,
                 attempted_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -132,11 +134,11 @@ async function initDB() {
         // ──────────────────────────────────────────────
         console.log('🔍 Creating indexes...');
         const indexes = [
-            { name: 'idx_questions_category', table: 'questions',     column: 'category_id' },
-            { name: 'idx_choices_question',   table: 'choices',       column: 'question_id' },
-            { name: 'idx_user_scores_user',   table: 'user_scores',   column: 'user_id' },
+            { name: 'idx_questions_category', table: 'questions', column: 'category_id' },
+            { name: 'idx_choices_question', table: 'choices', column: 'question_id' },
+            { name: 'idx_user_scores_user', table: 'user_scores', column: 'user_id' },
             { name: 'idx_quiz_attempts_user', table: 'quiz_attempts', column: 'user_id' },
-            { name: 'idx_categories_group',   table: 'categories',    column: 'group_name' },
+            { name: 'idx_categories_group', table: 'categories', column: 'group_name' },
         ];
 
         for (const idx of indexes) {
