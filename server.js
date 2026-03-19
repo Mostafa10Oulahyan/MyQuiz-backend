@@ -12,6 +12,7 @@ app.use(express.json());
 // Routes
 app.use('/api/users', require('./routes/users'));
 app.use('/api/questions', require('./routes/questions'));
+app.use('/api/categories', require('./routes/categories'));
 app.use('/api/admin', require('./routes/admin'));
 
 app.get('/', (req, res) => {
