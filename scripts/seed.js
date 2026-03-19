@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 // ──────────────────────────────────────────────────────────────
@@ -263,6 +264,21 @@ async function seedDB() {
             }
             console.log(`  ✅ ${count} questions seeded for "${categoryName}"`);
         }
+
+        // ─── 3. Create Admin User ─────────────────────
+        console.log('\n👤 Creating admin user...');
+        const adminPassword = 'tawba';
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(adminPassword, salt);
+        
+        await connection.query(`
+            INSERT INTO users (username, email, password_hash, role, total_points)
+            VALUES (?, ?, ?, 'admin', 9999)
+            ON DUPLICATE KEY UPDATE 
+                password_hash = VALUES(password_hash),
+                role = 'admin'
+        `, ['mostfa', 'mostfa@myquiz.com', passwordHash]);
+        console.log('  ✅ Admin user created (username: mostfa, password: tawba)');
 
         console.log('\n🎉 Seed completed successfully!');
     } catch (error) {
