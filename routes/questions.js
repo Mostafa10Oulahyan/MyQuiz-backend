@@ -14,7 +14,7 @@ router.get('/:category_name', async (req, res) => {
         const categoryId = categories[0].id;
 
         // 2. Get questions for this category
-        const [questions] = await pool.query('SELECT id, question_text, correct_answer as correctAnswer, hint FROM questions WHERE category_id = ?', [categoryId]);
+        const [questions] = await pool.query('SELECT id, question_text, correct_answer as correctAnswer, hint, hint_cost FROM questions WHERE category_id = ?', [categoryId]);
         
         if (questions.length === 0) return res.json([]);
 
@@ -22,8 +22,6 @@ router.get('/:category_name', async (req, res) => {
         for (let q of questions) {
             const [choices] = await pool.query('SELECT choice_text FROM choices WHERE question_id = ?', [q.id]);
             q.choices = choices.map(c => c.choice_text);
-            // remove id if not needed, but useful internally
-            delete q.id;
         }
 
         res.json(questions);

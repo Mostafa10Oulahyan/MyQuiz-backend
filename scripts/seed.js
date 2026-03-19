@@ -291,7 +291,7 @@ async function seedDB() {
         const passwordHash = await bcrypt.hash(adminPassword, salt);
         
         await connection.query(`
-            INSERT INTO users (username, email, password_hash, role, total_points)
+            INSERT INTO users (username, email, password_hash, role, hint_points)
             VALUES (?, ?, ?, 'admin', 9999)
             ON DUPLICATE KEY UPDATE 
                 password_hash = VALUES(password_hash),

@@ -2,7 +2,12 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 // ══════════════════════════════════════════════════════════════
-// initDB.js — Creates database schema matching claudeDB.sql
+// initDB.js — Creates database schema + migrates existing tables
+// ══════════════════════════════════════════════════════════════
+// Safe to run multiple times:
+//   • CREATE TABLE IF NOT EXISTS — creates new tables
+//   • ALTER TABLE — adds missing columns to existing tables
+//   • CREATE INDEX — skips duplicates
 // ══════════════════════════════════════════════════════════════
 
 async function initDB() {
@@ -23,8 +28,6 @@ async function initDB() {
 
         // ──────────────────────────────────────────────
         // 1. USERS TABLE
-        // total_points = hint wallet (starts at 50)
-        // NO full_time column (calculated from quiz_attempts)
         // ──────────────────────────────────────────────
         console.log('📋 Creating "users" table...');
         await connection.query(`
@@ -35,7 +38,7 @@ async function initDB() {
                 password_hash VARCHAR(255) NOT NULL,
                 role          ENUM('user', 'admin') DEFAULT 'user',
                 avatar_url    LONGTEXT DEFAULT NULL,
-                total_points  INT DEFAULT 50,
+                hint_points   INT DEFAULT 50,
                 is_active     TINYINT(1) DEFAULT 1,
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -63,7 +66,6 @@ async function initDB() {
 
         // ──────────────────────────────────────────────
         // 3. QUESTIONS TABLE
-        // hint_cost: points cost to reveal hint (default 10)
         // ──────────────────────────────────────────────
         console.log('📋 Creating "questions" table...');
         await connection.query(`
@@ -99,8 +101,7 @@ async function initDB() {
         `);
 
         // ──────────────────────────────────────────────
-        // 5. USER SCORES TABLE (best score per user per category)
-        // total_questions stored for % calculation
+        // 5. USER SCORES TABLE
         // ──────────────────────────────────────────────
         console.log('📋 Creating "user_scores" table...');
         await connection.query(`
@@ -120,7 +121,7 @@ async function initDB() {
         `);
 
         // ──────────────────────────────────────────────
-        // 6. QUIZ ATTEMPTS TABLE (full history)
+        // 6. QUIZ ATTEMPTS TABLE
         // ──────────────────────────────────────────────
         console.log('📋 Creating "quiz_attempts" table...');
         await connection.query(`
@@ -139,7 +140,7 @@ async function initDB() {
         `);
 
         // ──────────────────────────────────────────────
-        // 7. HINT USAGE TABLE (tracks every hint reveal)
+        // 7. HINT USAGE TABLE
         // ──────────────────────────────────────────────
         console.log('📋 Creating "hint_usage" table...');
         await connection.query(`
@@ -154,8 +155,54 @@ async function initDB() {
             );
         `);
 
+        // ══════════════════════════════════════════════════════════════
+        // 8. MIGRATIONS — add missing columns to existing tables
+        // ══════════════════════════════════════════════════════════════
+        console.log('🔄 Running migrations (adding missing columns)...');
+
+        const migrations = [
+            // users: rename total_points → hint_points (or add if missing)
+            { table: 'users', column: 'hint_points',   sql: "ALTER TABLE users ADD COLUMN hint_points INT DEFAULT 50" },
+            // questions: add hint_cost
+            { table: 'questions', column: 'hint_cost',  sql: "ALTER TABLE questions ADD COLUMN hint_cost INT DEFAULT 10 AFTER hint" },
+            // user_scores: add total_questions
+            { table: 'user_scores', column: 'total_questions', sql: "ALTER TABLE user_scores ADD COLUMN total_questions INT NOT NULL DEFAULT 10 AFTER score" },
+            // user_scores: add completed_at
+            { table: 'user_scores', column: 'completed_at', sql: "ALTER TABLE user_scores ADD COLUMN completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" },
+        ];
+
+        for (const mig of migrations) {
+            try {
+                // Check if column already exists
+                const [cols] = await connection.query(
+                    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+                    [dbName, mig.table, mig.column]
+                );
+                if (cols.length === 0) {
+                    await connection.query(mig.sql);
+                    console.log(`  ✅ Added ${mig.table}.${mig.column}`);
+                }
+            } catch (e) {
+                console.warn(`  ⚠️  Migration ${mig.table}.${mig.column}: ${e.message}`);
+            }
+        }
+
+        // Special migration: rename total_points → hint_points if old column exists
+        try {
+            const [oldCol] = await connection.query(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'total_points'`,
+                [dbName]
+            );
+            if (oldCol.length > 0) {
+                await connection.query('ALTER TABLE users CHANGE total_points hint_points INT DEFAULT 50');
+                console.log('  ✅ Renamed users.total_points → hint_points');
+            }
+        } catch (e) {
+            console.warn(`  ⚠️  Rename total_points: ${e.message}`);
+        }
+
         // ──────────────────────────────────────────────
-        // 8. PERFORMANCE INDEXES
+        // 9. PERFORMANCE INDEXES
         // ──────────────────────────────────────────────
         console.log('🔍 Creating indexes...');
         const indexes = [
