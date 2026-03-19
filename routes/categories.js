@@ -20,4 +20,23 @@ router.get('/', async (req, res) => {
     }
 });
 
+// @route   GET /api/categories/:name
+// @desc    Get a single category by its name
+router.get('/:name', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT c.*, COUNT(q.id) as question_count 
+            FROM categories c 
+            LEFT JOIN questions q ON c.id = q.category_id 
+            WHERE c.name = ? AND c.is_active = 1
+            GROUP BY c.id
+        `, [req.params.name]);
+        
+        if (rows.length === 0) return res.status(404).json({ message: 'Category not found' });
+        res.json(rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

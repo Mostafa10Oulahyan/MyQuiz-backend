@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `email`         VARCHAR(100) UNIQUE NOT NULL,
     `password_hash` VARCHAR(255) NOT NULL,
     `role`          ENUM('user', 'admin') DEFAULT 'user',
-    `avatar_url`    VARCHAR(500) DEFAULT NULL,
+    `avatar_url`    LONGTEXT DEFAULT NULL,
     `total_points`  INT DEFAULT 50,
     `full_time`     INT DEFAULT 0,
     `is_active`     TINYINT(1) DEFAULT 1,

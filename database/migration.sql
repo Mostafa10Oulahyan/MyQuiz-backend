@@ -15,8 +15,11 @@ ADD COLUMN IF NOT EXISTS `points` INT DEFAULT 0 AFTER `score`;
 ALTER TABLE `quiz_attempts` 
 ADD COLUMN IF NOT EXISTS `points` INT DEFAULT 0 AFTER `score`;
 
--- 3. (Optional) Initialize points based on existing scores (Score * 100)
+-- 3. Update avatar_url to support large Base64 strings
+ALTER TABLE `users` MODIFY COLUMN `avatar_url` LONGTEXT;
+
+-- 4. (Optional) Initialize points based on existing scores (Score * 100)
 UPDATE `user_scores` SET `points` = `score` * 100 WHERE `points` = 0;
 UPDATE `quiz_attempts` SET `points` = `score` * 100 WHERE `points` = 0;
 
-SELECT 'Migration complete! Points columns added and initialized.' AS result;
+SELECT 'Migration complete! Points columns added and avatar_url expanded.' AS result;
