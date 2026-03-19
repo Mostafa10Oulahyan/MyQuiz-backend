@@ -171,4 +171,33 @@ router.put('/profile', verifyToken, async (req, res) => {
     }
 });
 
+// Get Leaderboard (Ranking)
+router.get('/leaderboard', async (req, res) => {
+    try {
+        // This query gets each user's stats and their most recent/best category group
+        // We order by total_points DESC
+        const [rows] = await pool.query(`
+            SELECT 
+                u.id, 
+                u.username, 
+                u.avatar_url, 
+                u.total_points, 
+                u.full_time,
+                MAX(us.score) as best_score,
+                MAX(us.completed_at) as last_quiz_date,
+                c.group_name as last_quiz_type
+            FROM users u
+            LEFT JOIN user_scores us ON u.id = us.user_id
+            LEFT JOIN categories c ON us.category_id = c.id
+            GROUP BY u.id
+            ORDER BY u.total_points DESC, u.full_time ASC
+            LIMIT 50
+        `);
+        
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
