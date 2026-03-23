@@ -162,10 +162,10 @@ async function initDB() {
 
         const migrations = [
             // users: rename total_points → hint_points (or add if missing)
-            { table: 'users', column: 'hint_points',   sql: "ALTER TABLE users ADD COLUMN hint_points INT DEFAULT 50" },
+            { table: 'users', column: 'hint_points', sql: "ALTER TABLE users ADD COLUMN hint_points INT DEFAULT 50" },
             // questions: add hint_cost
-            { table: 'questions', column: 'hint_cost',  sql: "ALTER TABLE questions ADD COLUMN hint_cost INT DEFAULT 10 AFTER hint" },
-            { table: 'user_scores', column: 'score',           sql: "ALTER TABLE user_scores MODIFY COLUMN score FLOAT NOT NULL" },
+            { table: 'questions', column: 'hint_cost', sql: "ALTER TABLE questions ADD COLUMN hint_cost INT DEFAULT 10 AFTER hint" },
+            { table: 'user_scores', column: 'score', sql: "ALTER TABLE user_scores MODIFY COLUMN score FLOAT NOT NULL" },
             // user_scores: add total_questions
             { table: 'user_scores', column: 'total_questions', sql: "ALTER TABLE user_scores ADD COLUMN total_questions INT NOT NULL DEFAULT 10 AFTER score" },
             // user_scores: add completed_at
@@ -188,25 +188,49 @@ async function initDB() {
             }
         }
 
-        // Special migration: rename total_points → hint_points if old column exists
+        // Legacy Clean-up: remove total_points if hint_points exists
         try {
             const [oldCol] = await connection.query(
                 `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'total_points'`,
                 [dbName]
             );
             if (oldCol.length > 0) {
-                await connection.query('ALTER TABLE users CHANGE total_points hint_points INT DEFAULT 50');
-                console.log('  ✅ Renamed users.total_points → hint_points');
+                // Check if hint_points also exists to avoid dropping the only points column
+                const [newCol] = await connection.query(
+                    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'hint_points'`,
+                    [dbName]
+                );
+                if (newCol.length > 0) {
+                    await connection.query('ALTER TABLE users DROP COLUMN total_points');
+                    console.log('  ✅ Dropped legacy column users.total_points');
+                } else {
+                    await connection.query('ALTER TABLE users CHANGE total_points hint_points INT DEFAULT 50');
+                    console.log('  ✅ Renamed users.total_points → hint_points');
+                }
             }
         } catch (e) {
-            console.warn(`  ⚠️  Rename total_points: ${e.message}`);
+            console.warn(`  ⚠️  Cleaning total_points: ${e.message}`);
+        }
+
+        // Legacy Clean-up: remove full_time if it exists in users
+        try {
+            const [oldFullTime] = await connection.query(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'full_time'`,
+                [dbName]
+            );
+            if (oldFullTime.length > 0) {
+                await connection.query('ALTER TABLE users DROP COLUMN full_time');
+                console.log('  ✅ Dropped legacy column users.full_time');
+            }
+        } catch (e) {
+            console.warn(`  ⚠️  Cleaning full_time: ${e.message}`);
         }
 
         // ──────────────────────────────────────────────
         // 10. STORED PROCEDURES
         // ──────────────────────────────────────────────
         console.log('📦 Creating stored procedures...');
-        
+
         // Remove existing procedures to recreate them
         await connection.query('DROP PROCEDURE IF EXISTS use_hint;');
         await connection.query('DROP PROCEDURE IF EXISTS submit_quiz;');
@@ -242,7 +266,7 @@ async function initDB() {
                 DECLARE v_score FLOAT;
                 DECLARE v_points INT;
 
-                SET v_score = (p_score / p_total_questions) * 10;
+                SET v_score = (p_score * 10.0 / p_total_questions);
                 SET v_points = p_score * 100;
 
                 INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, time_spent)
@@ -264,13 +288,13 @@ async function initDB() {
         // ──────────────────────────────────────────────
         console.log('🔍 Creating indexes...');
         const indexes = [
-            { name: 'idx_questions_category',  table: 'questions',     column: 'category_id' },
-            { name: 'idx_choices_question',    table: 'choices',       column: 'question_id' },
-            { name: 'idx_user_scores_user',    table: 'user_scores',   column: 'user_id' },
-            { name: 'idx_quiz_attempts_user',  table: 'quiz_attempts', column: 'user_id' },
-            { name: 'idx_categories_group',    table: 'categories',    column: 'group_name' },
-            { name: 'idx_hint_usage_user',     table: 'hint_usage',    column: 'user_id' },
-            { name: 'idx_hint_usage_question', table: 'hint_usage',    column: 'question_id' },
+            { name: 'idx_questions_category', table: 'questions', column: 'category_id' },
+            { name: 'idx_choices_question', table: 'choices', column: 'question_id' },
+            { name: 'idx_user_scores_user', table: 'user_scores', column: 'user_id' },
+            { name: 'idx_quiz_attempts_user', table: 'quiz_attempts', column: 'user_id' },
+            { name: 'idx_categories_group', table: 'categories', column: 'group_name' },
+            { name: 'idx_hint_usage_user', table: 'hint_usage', column: 'user_id' },
+            { name: 'idx_hint_usage_question', table: 'hint_usage', column: 'question_id' },
         ];
 
         for (const idx of indexes) {

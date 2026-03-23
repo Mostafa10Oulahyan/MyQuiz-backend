@@ -1,4 +1,6 @@
 *.env
 /node_modules
 .vscode
-.sql
+*.sql
+/database
+/config

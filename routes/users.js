@@ -192,8 +192,50 @@ router.post('/score', verifyToken, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// PROFILE
+// PROFILE & STATS
 // ══════════════════════════════════════════════════════════════
+
+router.get('/stats', verifyToken, async (req, res) => {
+    try {
+        const [stats] = await pool.query(`
+            SELECT 
+                IFNULL(SUM(points), 0) as total_points,
+                IFNULL(MAX(score), 0) as best_score,
+                COUNT(*) as total_quizzes
+            FROM user_scores 
+            WHERE user_id = ?
+        `, [req.user.id]);
+        
+        const [hints] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [req.user.id]);
+        
+        res.json({
+            ...stats[0],
+            hint_points: hints[0]?.hint_points || 0
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/attempts', verifyToken, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                qa.*, 
+                c.display_name as category_name,
+                c.icon as category_icon,
+                c.color as category_color
+            FROM quiz_attempts qa
+            JOIN categories c ON qa.category_id = c.id
+            WHERE qa.user_id = ?
+            ORDER BY qa.attempted_at DESC
+            LIMIT 100
+        `, [req.user.id]);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 router.put('/profile', verifyToken, async (req, res) => {
     try {

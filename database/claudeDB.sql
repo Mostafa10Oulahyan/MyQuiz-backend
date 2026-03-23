@@ -223,7 +223,7 @@ BEGIN
     DECLARE v_points INT;
 
     -- Score formula: (correct / total) * 10
-    SET v_score = (p_score / p_total_questions) * 10;
+    SET v_score = (p_score * 10.0 / p_total_questions);
     
     -- Points formula: correct answers * 100
     SET v_points = p_score * 100;
