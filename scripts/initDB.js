@@ -56,6 +56,7 @@ async function initDB() {
                 display_name  VARCHAR(100) NOT NULL,
                 group_name    ENUM('frontend', 'backend', 'database', 'framework') NOT NULL,
                 icon          VARCHAR(100) DEFAULT NULL,
+                image_url     LONGTEXT DEFAULT NULL,
                 color         VARCHAR(20) DEFAULT '#3b82f6',
                 description   TEXT DEFAULT NULL,
                 display_order INT DEFAULT 0,
@@ -72,6 +73,7 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS questions (
                 id              INT AUTO_INCREMENT PRIMARY KEY,
                 category_id     INT NOT NULL,
+                title           VARCHAR(255) DEFAULT NULL,
                 question_text   TEXT NOT NULL,
                 correct_answer  VARCHAR(255) NOT NULL,
                 hint            TEXT DEFAULT NULL,
@@ -132,6 +134,7 @@ async function initDB() {
                 score           FLOAT NOT NULL,
                 total_questions INT NOT NULL,
                 points          INT DEFAULT 0,
+                points_added    INT DEFAULT 0,
                 time_spent      INT DEFAULT 0,
                 attempted_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id)     REFERENCES users(id)      ON DELETE CASCADE,
@@ -170,6 +173,9 @@ async function initDB() {
             { table: 'user_scores', column: 'total_questions', sql: "ALTER TABLE user_scores ADD COLUMN total_questions INT NOT NULL DEFAULT 10 AFTER score" },
             // user_scores: add completed_at
             { table: 'user_scores', column: 'completed_at', sql: "ALTER TABLE user_scores ADD COLUMN completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" },
+            { table: 'quiz_attempts', column: 'points_added', sql: "ALTER TABLE quiz_attempts ADD COLUMN points_added INT DEFAULT 0 AFTER points" },
+            { table: 'categories', column: 'image_url', sql: "ALTER TABLE categories ADD COLUMN image_url LONGTEXT DEFAULT NULL AFTER icon" },
+            { table: 'questions', column: 'title', sql: "ALTER TABLE questions ADD COLUMN title VARCHAR(255) DEFAULT NULL AFTER category_id" },
         ];
 
         for (const mig of migrations) {
@@ -265,13 +271,30 @@ async function initDB() {
             BEGIN
                 DECLARE v_score FLOAT;
                 DECLARE v_points INT;
+                DECLARE v_old_points INT DEFAULT 0;
+                DECLARE v_points_added INT DEFAULT 0;
 
+                -- 1. Calculate new score/points
                 SET v_score = (p_score * 10.0 / p_total_questions);
                 SET v_points = p_score * 100;
 
-                INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, time_spent)
-                VALUES (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent);
+                -- 2. Fetch existing best points for this category
+                SELECT IFNULL(points, 0) INTO v_old_points 
+                FROM user_scores 
+                WHERE user_id = p_user_id AND category_id = p_category_id;
 
+                -- 3. Calculate actual points added (gain)
+                IF v_points > v_old_points THEN
+                    SET v_points_added = v_points - v_old_points;
+                ELSE
+                    SET v_points_added = 0;
+                END IF;
+
+                -- 4. Record the attempt with the points gain
+                INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, points_added, time_spent)
+                VALUES (p_user_id, p_category_id, v_score, p_total_questions, v_points, v_points_added, p_time_spent);
+
+                -- 5. Update best score if improved
                 INSERT INTO user_scores (user_id, category_id, score, total_questions, points, time_spent)
                 VALUES (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent)
                 ON DUPLICATE KEY UPDATE

@@ -104,10 +104,10 @@ router.get('/categories', verifyToken, verifyAdmin, async (req, res) => {
 // POST create category
 router.post('/categories', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const { name, display_name, group_name, icon, color, description, display_order } = req.body;
+        const { name, display_name, group_name, icon, image_url, color, description, display_order } = req.body;
         const [result] = await pool.query(
-            'INSERT INTO categories (name, display_name, group_name, icon, color, description, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [name, display_name, group_name, icon || null, color || '#3b82f6', description || null, display_order || 0]
+            'INSERT INTO categories (name, display_name, group_name, icon, image_url, color, description, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, display_name, group_name, icon || null, image_url || null, color || '#3b82f6', description || null, display_order || 0]
         );
         res.status(201).json({ message: 'Category created', id: result.insertId });
     } catch (err) {
@@ -118,10 +118,10 @@ router.post('/categories', verifyToken, verifyAdmin, async (req, res) => {
 // PUT update category
 router.put('/categories/:id', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const { display_name, group_name, icon, color, description, display_order, is_active } = req.body;
+        const { display_name, group_name, icon, image_url, color, description, display_order, is_active } = req.body;
         await pool.query(
-            'UPDATE categories SET display_name=?, group_name=?, icon=?, color=?, description=?, display_order=?, is_active=? WHERE id=?',
-            [display_name, group_name, icon, color, description, display_order, is_active, req.params.id]
+            'UPDATE categories SET display_name=?, group_name=?, icon=?, image_url=?, color=?, description=?, display_order=?, is_active=? WHERE id=?',
+            [display_name, group_name, icon, image_url, color, description, display_order, is_active, req.params.id]
         );
         res.json({ message: 'Category updated' });
     } catch (err) {
@@ -180,10 +180,10 @@ router.get('/questions/:id', verifyToken, verifyAdmin, async (req, res) => {
 // POST create question with choices
 router.post('/questions', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const { category_id, question_text, correct_answer, hint, difficulty, choices } = req.body;
+        const { category_id, title, question_text, correct_answer, hint, difficulty, choices } = req.body;
         const [result] = await pool.query(
-            'INSERT INTO questions (category_id, question_text, correct_answer, hint, difficulty, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-            [category_id, question_text, correct_answer, hint || null, difficulty || 'medium', req.user.id]
+            'INSERT INTO questions (category_id, title, question_text, correct_answer, hint, difficulty, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [category_id, title || null, question_text, correct_answer, hint || null, difficulty || 'medium', req.user.id]
         );
         const questionId = result.insertId;
 
@@ -205,10 +205,10 @@ router.post('/questions', verifyToken, verifyAdmin, async (req, res) => {
 // PUT update question
 router.put('/questions/:id', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const { question_text, correct_answer, hint, difficulty, is_active, choices } = req.body;
+        const { title, question_text, correct_answer, hint, difficulty, is_active, choices } = req.body;
         await pool.query(
-            'UPDATE questions SET question_text=?, correct_answer=?, hint=?, difficulty=?, is_active=? WHERE id=?',
-            [question_text, correct_answer, hint, difficulty, is_active, req.params.id]
+            'UPDATE questions SET title=?, question_text=?, correct_answer=?, hint=?, difficulty=?, is_active=? WHERE id=?',
+            [title || null, question_text, correct_answer, hint, difficulty, is_active, req.params.id]
         );
 
         // Replace choices if provided
