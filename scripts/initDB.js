@@ -109,7 +109,7 @@ async function initDB() {
                 id              INT AUTO_INCREMENT PRIMARY KEY,
                 user_id         INT NOT NULL,
                 category_id     INT NOT NULL,
-                score           INT NOT NULL,
+                score           FLOAT NOT NULL,
                 total_questions INT NOT NULL,
                 points          INT DEFAULT 0,
                 time_spent      INT DEFAULT 0,
@@ -129,7 +129,7 @@ async function initDB() {
                 id              INT AUTO_INCREMENT PRIMARY KEY,
                 user_id         INT NOT NULL,
                 category_id     INT NOT NULL,
-                score           INT NOT NULL,
+                score           FLOAT NOT NULL,
                 total_questions INT NOT NULL,
                 points          INT DEFAULT 0,
                 time_spent      INT DEFAULT 0,
@@ -165,6 +165,7 @@ async function initDB() {
             { table: 'users', column: 'hint_points',   sql: "ALTER TABLE users ADD COLUMN hint_points INT DEFAULT 50" },
             // questions: add hint_cost
             { table: 'questions', column: 'hint_cost',  sql: "ALTER TABLE questions ADD COLUMN hint_cost INT DEFAULT 10 AFTER hint" },
+            { table: 'user_scores', column: 'score',           sql: "ALTER TABLE user_scores MODIFY COLUMN score FLOAT NOT NULL" },
             // user_scores: add total_questions
             { table: 'user_scores', column: 'total_questions', sql: "ALTER TABLE user_scores ADD COLUMN total_questions INT NOT NULL DEFAULT 10 AFTER score" },
             // user_scores: add completed_at
@@ -202,7 +203,64 @@ async function initDB() {
         }
 
         // ──────────────────────────────────────────────
-        // 9. PERFORMANCE INDEXES
+        // 10. STORED PROCEDURES
+        // ──────────────────────────────────────────────
+        console.log('📦 Creating stored procedures...');
+        
+        // Remove existing procedures to recreate them
+        await connection.query('DROP PROCEDURE IF EXISTS use_hint;');
+        await connection.query('DROP PROCEDURE IF EXISTS submit_quiz;');
+
+        // Create use_hint
+        await connection.query(`
+            CREATE PROCEDURE use_hint(IN p_user_id INT, IN p_question_id INT)
+            BEGIN
+                DECLARE v_hint_cost   INT;
+                DECLARE v_user_points INT;
+
+                SELECT hint_cost INTO v_hint_cost FROM questions WHERE id = p_question_id;
+                SELECT hint_points INTO v_user_points FROM users WHERE id = p_user_id;
+
+                IF v_user_points < v_hint_cost THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Not enough points to reveal this hint';
+                ELSE
+                    INSERT INTO hint_usage (user_id, question_id, points_spent)
+                    VALUES (p_user_id, p_question_id, v_hint_cost);
+
+                    UPDATE users SET hint_points = hint_points - v_hint_cost WHERE id = p_user_id;
+                END IF;
+            END
+        `);
+
+        // Create submit_quiz
+        await connection.query(`
+            CREATE PROCEDURE submit_quiz(
+                IN p_user_id INT, IN p_category_id INT, IN p_score INT, 
+                IN p_total_questions INT, IN p_time_spent INT
+            )
+            BEGIN
+                DECLARE v_score FLOAT;
+                DECLARE v_points INT;
+
+                SET v_score = (p_score / p_total_questions) * 10;
+                SET v_points = p_score * 100;
+
+                INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, time_spent)
+                VALUES (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent);
+
+                INSERT INTO user_scores (user_id, category_id, score, total_questions, points, time_spent)
+                VALUES (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent)
+                ON DUPLICATE KEY UPDATE
+                    score = IF(VALUES(score) > score, VALUES(score), score),
+                    total_questions = IF(VALUES(score) > score, VALUES(total_questions), total_questions),
+                    points = IF(VALUES(score) > score, VALUES(points), points),
+                    time_spent = IF(VALUES(score) > score, VALUES(time_spent), time_spent),
+                    completed_at = IF(VALUES(score) > score, NOW(), completed_at);
+            END
+        `);
+
+        // ──────────────────────────────────────────────
+        // 11. PERFORMANCE INDEXES
         // ──────────────────────────────────────────────
         console.log('🔍 Creating indexes...');
         const indexes = [
@@ -223,7 +281,7 @@ async function initDB() {
             }
         }
 
-        console.log('✅ Database schema created successfully!');
+        console.log('✅ Database schema and procedures created successfully!');
     } catch (error) {
         console.error('❌ Error initializing database:', error);
     } finally {

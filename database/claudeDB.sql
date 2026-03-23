@@ -3,7 +3,7 @@
 -- ============================================================
 -- Changes from original:
 --   • users.full_time REMOVED (calculated from quiz_attempts)
---   • users.total_points KEPT as hint wallet (default 50)
+--   • users.hint_points KEPT as hint wallet (default 50)
 --   • questions.hint_cost ADDED (points cost per hint)
 --   • hint_usage TABLE ADDED (tracks every hint purchase)
 --   • user_scores.total_questions ADDED (needed for % calc)
@@ -16,8 +16,7 @@ USE `mostafa_quizdb`;
 -- ============================================================
 -- 1. USERS
 -- ============================================================
--- total_points = hint wallet (starts at 50)
---   +X when user completes a quiz (reward)
+-- hint_points = hint wallet (starts at 50)
 --   -X when user reveals a hint (cost)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `users` (
@@ -27,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `password_hash` VARCHAR(255) NOT NULL,
     `role`          ENUM('user', 'admin') DEFAULT 'user',
     `avatar_url`    LONGTEXT DEFAULT NULL,
-    `total_points`  INT DEFAULT 50,          -- hint wallet
+    `hint_points`   INT DEFAULT 50,          -- hint wallet
     `is_active`     TINYINT(1) DEFAULT 1,
     `created_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -129,7 +128,7 @@ CREATE TABLE IF NOT EXISTS `quiz_attempts` (
 -- ============================================================
 -- When a user reveals a hint:
 --   1. INSERT into hint_usage
---   2. UPDATE users SET total_points = total_points - hint_cost
+--   2. UPDATE users SET hint_points = hint_points - hint_cost
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `hint_usage` (
     `id`           INT AUTO_INCREMENT PRIMARY KEY,
@@ -193,7 +192,7 @@ BEGIN
     SELECT `hint_cost` INTO v_hint_cost
     FROM `questions` WHERE `id` = p_question_id;
 
-    SELECT `total_points` INTO v_user_points
+    SELECT `hint_points` INTO v_user_points
     FROM `users` WHERE `id` = p_user_id;
 
     IF v_user_points < v_hint_cost THEN
@@ -204,7 +203,7 @@ BEGIN
         VALUES (p_user_id, p_question_id, v_hint_cost);
 
         UPDATE `users`
-        SET `total_points` = `total_points` - v_hint_cost
+        SET `hint_points` = `hint_points` - v_hint_cost
         WHERE `id` = p_user_id;
     END IF;
 END$$
@@ -220,28 +219,26 @@ CREATE PROCEDURE `submit_quiz`(
     IN p_time_spent      INT
 )
 BEGIN
+    DECLARE v_score  FLOAT;
     DECLARE v_points INT;
 
-    -- Points formula: % correct * 100, bonus 20pts if under 60 seconds
-    SET v_points = ROUND((p_score / p_total_questions) * 100)
-                 + IF(p_time_spent < 60, 20, 0);
+    -- Score formula: (correct / total) * 10
+    SET v_score = (p_score / p_total_questions) * 10;
+    
+    -- Points formula: correct answers * 100
+    SET v_points = p_score * 100;
 
     -- Log attempt
     INSERT INTO `quiz_attempts`
         (`user_id`, `category_id`, `score`, `total_questions`, `points`, `time_spent`)
     VALUES
-        (p_user_id, p_category_id, p_score, p_total_questions, v_points, p_time_spent);
-
-    -- Award points to wallet
-    UPDATE `users`
-    SET `total_points` = `total_points` + v_points
-    WHERE `id` = p_user_id;
+        (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent);
 
     -- Upsert best score (only update if this attempt is better)
     INSERT INTO `user_scores`
         (`user_id`, `category_id`, `score`, `total_questions`, `points`, `time_spent`)
     VALUES
-        (p_user_id, p_category_id, p_score, p_total_questions, v_points, p_time_spent)
+        (p_user_id, p_category_id, v_score, p_total_questions, v_points, p_time_spent)
     ON DUPLICATE KEY UPDATE
         `score`           = IF(VALUES(`score`) > `score`, VALUES(`score`), `score`),
         `total_questions` = IF(VALUES(`score`) > `score`, VALUES(`total_questions`), `total_questions`),

@@ -243,7 +243,7 @@ router.delete('/questions/:id', verifyToken, verifyAdmin, async (req, res) => {
 router.get('/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const [users] = await pool.query(
-            'SELECT id, username, email, role, total_points, full_time, is_active, created_at FROM users ORDER BY created_at DESC'
+            'SELECT id, username, email, role, hint_points, full_time, is_active, created_at FROM users ORDER BY created_at DESC'
         );
         res.json(users);
     } catch (err) {

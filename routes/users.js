@@ -148,6 +148,7 @@ router.post('/score', verifyToken, async (req, res) => {
         if (categories.length === 0) return res.status(400).json({ message: 'Category not found' });
         const categoryId = categories[0].id;
 
+        const finalScore = (score / totalQ) * 10;
         const points_earned = score * 100;
         const time_added = parseInt(time_spent) || 0;
 
@@ -170,26 +171,20 @@ router.post('/score', verifyToken, async (req, res) => {
                 points = IF(VALUES(score) > score, VALUES(points), points),
                 time_spent = IF(VALUES(score) > score, VALUES(time_spent), time_spent),
                 completed_at = CURRENT_TIMESTAMP
-        `, [userId, categoryId, score, totalQ, points_earned, time_added]);
+        `, [userId, categoryId, finalScore, totalQ, points_earned, time_added]);
 
         // 4. Log the Attempt → quiz_attempts table
         await pool.query(`
             INSERT INTO quiz_attempts (user_id, category_id, score, total_questions, points, time_spent)
             VALUES (?, ?, ?, ?, ?, ?)
-        `, [userId, categoryId, score, totalQ, points_earned, time_added]);
+        `, [userId, categoryId, finalScore, totalQ, points_earned, time_added]);
 
-        // 5. Update User Hint Wallet
-        await pool.query(`
-            UPDATE users SET hint_points = hint_points + ? WHERE id = ?
-        `, [points_diff, userId]);
-
-        const [updatedUser] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [userId]);
+        // 5. DO NOT update hint_points — it's only for hints (deducted via POST /hint)
 
         res.json({ 
             message: 'Score enregistré avec succès', 
             points_earned,
-            points_added: points_diff,
-            hint_points: updatedUser[0].hint_points 
+            points_added: points_diff
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
