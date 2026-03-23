@@ -296,11 +296,10 @@ router.get('/leaderboard', async (req, res) => {
                     IFNULL(us_stats.total_pts, 0) as total_points,
                     IFNULL(us_stats.max_score, 0) as best_score,
                     us_stats.last_date as last_quiz_date,
-                    (SELECT c.group_name 
+                    (SELECT GROUP_CONCAT(DISTINCT c.name) 
                      FROM user_scores us2 
                      JOIN categories c ON us2.category_id = c.id 
-                     WHERE us2.user_id = u.id 
-                     ORDER BY us2.completed_at DESC LIMIT 1) as last_quiz_type
+                     WHERE us2.user_id = u.id) as played_categories
                 FROM users u
                 LEFT JOIN (
                     SELECT user_id, SUM(points) as total_pts, MAX(score) as max_score, MAX(completed_at) as last_date
@@ -314,6 +313,28 @@ router.get('/leaderboard', async (req, res) => {
         }
         
         const [rows] = await pool.query(query, params);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /attempts/:userId — fetch public attempt history for the popup
+router.get('/attempts/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const [rows] = await pool.query(`
+            SELECT 
+                qa.*, 
+                c.display_name as category_name,
+                c.icon as category_icon,
+                c.color as category_color
+            FROM quiz_attempts qa
+            JOIN categories c ON qa.category_id = c.id
+            WHERE qa.user_id = ?
+            ORDER BY qa.attempted_at DESC
+            LIMIT 20
+        `, [userId]);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
