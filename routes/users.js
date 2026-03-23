@@ -28,7 +28,7 @@ const verifyToken = (req, res, next) => {
 router.post('/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
-        
+
         const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(400).json({ message: 'User already exists' });
 
@@ -50,7 +50,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
         const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
         if (users.length === 0) return res.status(400).json({ message: 'User not found' });
         const user = users[0];
@@ -59,10 +59,17 @@ router.post('/login', async (req, res) => {
         if (!validPassword) return res.status(400).json({ message: 'Invalid password' });
 
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '24h' });
-        
+
         res.json({ 
             token, 
-            user: { id: user.id, username: user.username, email: user.email, avatar_url: user.avatar_url, hint_points: user.hint_points } 
+            user: { 
+                id: user.id, 
+                username: user.username, 
+                email: user.email, 
+                avatar_url: user.avatar_url, 
+                hint_points: user.hint_points,
+                role: user.role
+            } 
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -77,16 +84,16 @@ router.post('/login', async (req, res) => {
 router.put('/points', verifyToken, async (req, res) => {
     try {
         const { points_diff } = req.body;
-        
+
         const [rows] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [req.user.id]);
         if (rows.length === 0) return res.status(404).json({ message: 'User not found' });
 
         let currentPoints = rows[0].hint_points;
         let newPoints = currentPoints + points_diff;
         if (newPoints < 0) newPoints = 0;
-        
+
         await pool.query('UPDATE users SET hint_points = ? WHERE id = ?', [newPoints, req.user.id]);
-        
+
         res.json({ message: 'Points updated', new_points: newPoints });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -107,7 +114,7 @@ router.post('/hint', verifyToken, async (req, res) => {
         // 2. Check user has enough points
         const [users] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [userId]);
         if (users.length === 0) return res.status(404).json({ message: 'User not found' });
-        
+
         if (users[0].hint_points < hintCost) {
             return res.status(400).json({ message: 'Not enough hint points', required: hintCost, available: users[0].hint_points });
         }
@@ -123,10 +130,10 @@ router.post('/hint', verifyToken, async (req, res) => {
 
         const [updated] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [userId]);
 
-        res.json({ 
-            message: 'Hint used', 
-            points_spent: hintCost, 
-            hint_points: updated[0].hint_points 
+        res.json({
+            message: 'Hint used',
+            points_spent: hintCost,
+            hint_points: updated[0].hint_points
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -139,7 +146,7 @@ router.post('/hint', verifyToken, async (req, res) => {
 
 router.post('/score', verifyToken, async (req, res) => {
     try {
-        const { category_name, score, time_spent, total_questions } = req.body; 
+        const { category_name, score, time_spent, total_questions } = req.body;
         const userId = req.user.id;
         const totalQ = total_questions || 10;
 
@@ -157,7 +164,7 @@ router.post('/score', verifyToken, async (req, res) => {
             'SELECT points FROM user_scores WHERE user_id = ? AND category_id = ?',
             [userId, categoryId]
         );
-        
+
         const old_points = prevScore.length > 0 ? prevScore[0].points : 0;
         const points_diff = Math.max(0, points_earned - old_points);
 
@@ -181,8 +188,8 @@ router.post('/score', verifyToken, async (req, res) => {
 
         // 5. DO NOT update hint_points — it's only for hints (deducted via POST /hint)
 
-        res.json({ 
-            message: 'Score enregistré avec succès', 
+        res.json({
+            message: 'Score enregistré avec succès',
             points_earned,
             points_added: points_diff
         });
@@ -205,9 +212,9 @@ router.get('/stats', verifyToken, async (req, res) => {
             FROM user_scores 
             WHERE user_id = ?
         `, [req.user.id]);
-        
+
         const [hints] = await pool.query('SELECT hint_points FROM users WHERE id = ?', [req.user.id]);
-        
+
         res.json({
             ...stats[0],
             hint_points: hints[0]?.hint_points || 0
@@ -240,17 +247,17 @@ router.get('/attempts', verifyToken, async (req, res) => {
 router.put('/profile', verifyToken, async (req, res) => {
     try {
         const { username, avatar_url } = req.body;
-        
+
         if (username) {
             const [existing] = await pool.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, req.user.id]);
             if (existing.length > 0) return res.status(400).json({ message: 'Ce nom d\'utilisateur est déjà pris.' });
         }
-        
+
         await pool.query(
             'UPDATE users SET username = COALESCE(?, username), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
             [username || null, avatar_url || null, req.user.id]
         );
-        
+
         const [updated] = await pool.query('SELECT id, username, email, avatar_url, hint_points FROM users WHERE id = ?', [req.user.id]);
         res.json({ message: 'Profil mis à jour', user: updated[0] });
     } catch (err) {
@@ -311,7 +318,7 @@ router.get('/leaderboard', async (req, res) => {
                 LIMIT 50
             `;
         }
-        
+
         const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (err) {
