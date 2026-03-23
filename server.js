@@ -14,6 +14,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/questions', require('./routes/questions'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/newsletter', require('./routes/newsletter'));
 
 app.get('/', (req, res) => {
     res.send('Quiz API is running...');

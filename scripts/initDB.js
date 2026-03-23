@@ -328,6 +328,18 @@ async function initDB() {
             }
         }
 
+        // ──────────────────────────────────────────────
+        // 12. NEWSLETTER EMAILS TABLE
+        // ──────────────────────────────────────────────
+        console.log('📧 Creating "newsletter_emails" table...');
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS newsletter_emails (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('✅ Database schema and procedures created successfully!');
     } catch (error) {
         console.error('❌ Error initializing database:', error);
